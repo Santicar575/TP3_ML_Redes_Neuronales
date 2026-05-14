@@ -113,15 +113,29 @@ class MLP:
         
         return loss, weights_grad, bias_grad
 
-    def fit(self, X, y, learning_rate, epochs, X_val=None, y_val=None):
+    def fit(self, X, y, eta_0, epochs, X_val=None, y_val=None,
+            lr_schedule=None, K=100, eta_K=0.001, s=10.0, c=0.95):
         loss_history = []
         val_loss_history = []
         m = X.shape[1]
-        for epoch in range(epochs):
+        for k in range(epochs):
+            if lr_schedule == "lineal":
+                if k < K:
+                    eta_k = (1 - k/K) * eta_0 + (k/K) * eta_K
+                else:
+                    eta_k = eta_K  # Evitar saturacion del rate
+                
+            elif lr_schedule == "exponencial":
+                eta_k = eta_0 * (c ** (k/s))
+
+            else:
+                # Constante (GD Standard)
+                eta_k = eta_0
+
             loss, weights_grad, bias_grad = self.back_propagation(X, y)
             for l in range(self.n_layers):
-                self.layer_list[l].weights -= (learning_rate / m) * weights_grad[l]
-                self.layer_list[l].bias -= (learning_rate / m) * bias_grad[l]
+                self.layer_list[l].weights -= (eta_k / m) * weights_grad[l]
+                self.layer_list[l].bias -= (eta_k / m) * bias_grad[l]
             loss_history.append(loss)
             
             if X_val is not None and y_val is not None:
