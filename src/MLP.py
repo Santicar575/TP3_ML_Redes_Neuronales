@@ -114,10 +114,14 @@ class MLP:
         return loss, weights_grad, bias_grad
 
     def fit(self, X, y, eta_0, epochs, X_val=None, y_val=None,
-            lr_schedule=None, K=100, eta_K=0.001, s=10.0, c=0.95):
+            lr_schedule=None, K=100, eta_K=0.001, s=10.0, c=0.95, batch_size=None):
         loss_history = []
         val_loss_history = []
         m = X.shape[1]
+        # Si batch_size es None, se usa todo el dataset (Batch GD)
+        if batch_size is None:
+            batch_size = m
+
         for k in range(epochs):
             if lr_schedule == "lineal":
                 if k < K:
@@ -131,12 +135,31 @@ class MLP:
             else:
                 # Constante (GD Standard)
                 eta_k = eta_0
+            
+            # Mezclo los datos al inicio de cada epoch para que los mini-batches sean lo mas representativos posible
+            permutation = np.random.permutation(m)
+            X_shuffled = X[:, permutation]
+            y_shuffled = y[:, permutation]
 
-            loss, weights_grad, bias_grad = self.back_propagation(X, y)
-            for l in range(self.n_layers):
-                self.layer_list[l].weights -= (eta_k / m) * weights_grad[l]
-                self.layer_list[l].bias -= (eta_k / m) * bias_grad[l]
-            loss_history.append(loss)
+            for i in range(0, m, batch_size):
+                # Extraer el mini-batch actual
+                X_batch = X_shuffled[:, i:i+batch_size]
+                y_batch = y_shuffled[:, i:i+batch_size]
+                
+                # Obtener la cantidad real de muestras en este batch ya que el ultimo puede ser mas chico
+                batch_m = X_batch.shape[1]
+
+                # Calcular gradientes para este mini-batch
+                _, weights_grad, bias_grad = self.back_propagation(X_batch, y_batch)
+                
+                # Actualizar pesos dividiendo por el tamaño del batch actual
+                for l in range(self.n_layers):
+                    self.layer_list[l].weights -= (eta_k / batch_m) * weights_grad[l]
+                    self.layer_list[l].bias -= (eta_k / batch_m) * bias_grad[l]
+            
+            Z_train, _ = self.forward_pass(X)
+            epoch_loss = self.cross_entropy(y, Z_train[-1])
+            loss_history.append(epoch_loss)
             
             if X_val is not None and y_val is not None:
                 Z_val, _ = self.forward_pass(X_val)
