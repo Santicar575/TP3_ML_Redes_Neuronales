@@ -120,7 +120,7 @@ class MLP:
     def fit(self, X, y, eta_0, epochs, X_val=None, y_val=None,
             lr_schedule=None, K=100, eta_K=0.001, s=10.0, c=0.95, batch_size=None,
             optimizer="gd", beta1=0.9, beta2=0.999, epsilon=1e-8,
-            lambda_l2=0.0, early_stopping=False, patience=10, min_delta=1e-4):
+            lambda_l2=0.0, early_stopping=False, patience=10, min_delta=1e-4, clip_norm=0.0):
 
         loss_history = []
         val_loss_history = []
@@ -172,14 +172,29 @@ class MLP:
 
                 _, weights_grad, bias_grad = self.back_propagation(X_batch, y_batch, lambda_l2)
                 
-                # actualizo pesos dividiendo por el tamaño del batch actual
+                # promedio los gradientes sobre el tamaño del batch
+                for l in range(self.n_layers):
+                    weights_grad[l] = weights_grad[l] / batch_m
+                    bias_grad[l] = bias_grad[l] / batch_m
+
+                # Gradient Clipping 
+                if clip_norm > 0.0:
+                    global_norm = np.sqrt(sum(np.sum(np.square(wg)) + np.sum(np.square(bg)) for wg, bg in zip(weights_grad, bias_grad)))
+                    
+                    # Si el gradiente explotó y supera el límite, se reduce
+                    if global_norm > clip_norm:
+                        scale = clip_norm / global_norm
+                        for l in range(self.n_layers):
+                            weights_grad[l] *= scale
+                            bias_grad[l] *= scale
+                
+                # actualizo pesos
                 if optimizer == "adam":
                     t += 1 
                     
                     for l in range(self.n_layers):
-                        # gradiente promedio del batch
-                        g_W = weights_grad[l] / batch_m
-                        g_b = bias_grad[l] / batch_m
+                        g_W = weights_grad[l] 
+                        g_b = bias_grad[l] 
                         
                         # actualizo estimaciones del 1er momento (momentum)
                         m_W[l] = beta1 * m_W[l] + (1 - beta1) * g_W
@@ -201,8 +216,8 @@ class MLP:
                 else:
                     # GD Estandar 
                     for l in range(self.n_layers):
-                        self.layer_list[l].weights -= (eta_k / batch_m) * weights_grad[l]
-                        self.layer_list[l].bias -= (eta_k / batch_m) * bias_grad[l]
+                        self.layer_list[l].weights -= eta_k * weights_grad[l]
+                        self.layer_list[l].bias -= eta_k * bias_grad[l]
             
             Z_train, _ = self.forward_pass(X)
             epoch_loss = self.cross_entropy(y, Z_train[-1])
@@ -228,7 +243,6 @@ class MLP:
                             for l, layer in enumerate(self.layer_list):
                                 layer.weights = best_weights[l]
                                 layer.bias = best_biases[l]
-                            print(f"Early Stopping en epoch {k+1}!")
                             break
         
         if X_val is not None and y_val is not None:
