@@ -1,0 +1,23 @@
+{
+    "best_params": {
+        "nodes_per_layer": [
+            784,
+            256,
+            128,
+            49
+        ],
+        "activation_func": "silu",
+        "dropout_p": 0.2,
+        "eta_0": 0.005,
+        "lambda_l2": 0.001,
+        "lr_schedule": "lineal",
+        "epochs": 300,
+        "optimizer": "adam",
+        "batch_size": 128,
+        "clip_norm": 0.0,
+        "early_stopping": true,
+        "patience": 15,
+        "min_delta": 0.001
+    },
+    "f1_macro_val": 0.6894
+}

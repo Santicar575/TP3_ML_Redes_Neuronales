@@ -121,3 +121,76 @@ def evaluate_model(model, X, y_one_hot, y_labels, num_classes, name_set):
     plot_accuracy_boxplot(class_accs, title=f"Accuracy por Clase - {name_set}")
     
     return cm, class_accs
+
+import torch
+
+def evaluate_pytorch_model(model, dataloader, criterion, num_classes, name_set):
+    """
+    Evalúa un modelo de PyTorch iterando sobre un DataLoader.
+    Calcula la Loss, F1-Score Macro, Accuracy por clase y genera los gráficos.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.eval() 
+    
+    total_loss = 0.0
+    all_preds = []
+    all_targets = []
+    
+    with torch.no_grad():
+        for inputs, targets in dataloader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            
+            # Forward pass
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            total_loss += loss.item() * inputs.size(0)
+            
+            preds = torch.argmax(outputs, dim=1)
+            
+            all_preds.extend(preds.cpu().numpy())
+            all_targets.extend(targets.cpu().numpy())
+            
+
+    avg_loss = total_loss / len(dataloader.dataset)
+    y_true = np.array(all_targets)
+    y_pred = np.array(all_preds)
+    
+    cm = compute_confusion_matrix(y_true, y_pred, num_classes)
+    f1_macro = f1_score_macro(cm)
+    class_accs = accuracy_per_class(y_true, y_pred, num_classes)
+    
+    print(f"--- Resultados para el Conjunto de {name_set} ---")
+    print(f"Cross-Entropy Loss : {avg_loss:.4f}")
+    print(f"F1-Score (Macro)   : {f1_macro:.4f}\n")
+    
+    header = f"{'Clase':>7} | {'Acc (%)':>8} | {'Muestras':>8}"
+    sep    = "-" * len(header)
+    rows = []
+    for c in range(num_classes):
+        n = int(np.sum(y_true == c))
+        rows.append(f"{c:>7} | {class_accs[c]*100:>7.2f}% | {n:>8}")
+    
+    n_rows = len(rows)
+    third = (n_rows + 2) // 3
+    cols = [rows[i*third:(i+1)*third] for i in range(3)]
+    
+    max_len = max(len(col) for col in cols)
+    for col in cols:
+        while len(col) < max_len:
+            col.append(" " * len(header))
+    
+    spacer = "    │    "
+    print(f"Accuracy por Clase - {name_set}")
+    print(spacer.join([header] * 3))
+    print(spacer.join([sep] * 3))
+    for row_parts in zip(*cols):
+        print(spacer.join(row_parts))
+    print(spacer.join([sep] * 3))
+    avg_acc = np.mean(class_accs)
+    print(f"Accuracy promedio: {avg_acc:.4f} ({avg_acc*100:.2f}%)  —  Total muestras: {len(y_true)}\n")
+    
+    # Gráficos
+    plot_accuracy_boxplot(class_accs, title=f"Accuracy por Clase - {name_set}")
+    plot_confusion_matrix(cm, title=f"Confusion Matrix - {name_set}")
+    
+    return cm, class_accs
